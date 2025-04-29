@@ -22,11 +22,6 @@ const containerStyle = {
     height: '100vh'
 };
 
-const mapContainerStyle = {
-    width: '100%',
-    height: '100%'
-};
-
 const defaultCenter = {
     lat: (CALGARY_BOUNDS.north + CALGARY_BOUNDS.south) / 2,
     lng: (CALGARY_BOUNDS.east + CALGARY_BOUNDS.west) / 2
