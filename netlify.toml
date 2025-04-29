@@ -1,6 +1,9 @@
 [build]
-  command = "npm run build --verbose"
+  command = "node -v && npm -v && npm run build"
   publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "18.17.0"
 
 [[redirects]]
   from = "/*"

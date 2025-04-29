@@ -7,4 +7,18 @@ export default defineConfig({
     server: {
         port: 3000,
     },
+    build: {
+        outDir: 'dist',
+        sourcemap: true,
+        minify: 'terser',
+        target: 'esnext',
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    'react-vendor': ['react', 'react-dom'],
+                    'google-maps': ['@react-google-maps/api']
+                }
+            }
+        }
+    }
 }); 
