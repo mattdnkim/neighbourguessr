@@ -48,8 +48,9 @@ const App: React.FC = () => {
 
     // Debug API key
     useEffect(() => {
-        const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+        const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'YOUR_DEVELOPMENT_API_KEY';
         console.log('API Key:', apiKey ? 'Present' : 'Missing');
+        console.log('Environment:', import.meta.env.MODE);
         if (!apiKey) {
             setError('API key is missing. Please check your .env file.');
         }
@@ -140,11 +141,15 @@ const App: React.FC = () => {
 
     useEffect(() => {
         if (position && isLoaded) {
+            console.log('Attempting to load Street View for position:', position);
             const streetViewService = new google.maps.StreetViewService();
             streetViewService.getPanorama({ location: position, radius: 50 }, (data, status) => {
                 console.log('Street View Status:', status);
+                console.log('Street View Data:', data);
                 if (status === 'OK' && data?.location?.pano) {
+                    console.log('Found panorama ID:', data.location.pano);
                     if (!panoramaRef.current) {
+                        console.log('Creating new Street View panorama');
                         const panorama = new google.maps.StreetViewPanorama(
                             document.getElementById('street-view') as HTMLElement,
                             {
@@ -165,9 +170,11 @@ const App: React.FC = () => {
                         );
                         panoramaRef.current = panorama;
                     } else {
+                        console.log('Updating existing panorama with new ID:', data.location.pano);
                         panoramaRef.current.setPano(data.location.pano);
                     }
                 } else {
+                    console.error('Street View error:', status);
                     setError(`No Street View available at this location (${status}). Please try again.`);
                     startNewRound();
                 }
