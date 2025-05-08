@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
+import { GoogleMap, LoadScript, Marker, Polyline } from '@react-google-maps/api';
 
 // Calgary city boundaries (approximate)
 const CALGARY_BOUNDS = {
@@ -9,12 +9,12 @@ const CALGARY_BOUNDS = {
     east: -113.8,
 };
 
-// Map bounds for Calgary
+// Map bounds for Calgary with some padding
 const calgaryBounds = {
-    north: CALGARY_BOUNDS.north,
-    south: CALGARY_BOUNDS.south,
-    west: CALGARY_BOUNDS.west,
-    east: CALGARY_BOUNDS.east,
+    north: CALGARY_BOUNDS.north + 0.1,
+    south: CALGARY_BOUNDS.south - 0.1,
+    west: CALGARY_BOUNDS.west - 0.1,
+    east: CALGARY_BOUNDS.east + 0.1,
 };
 
 const containerStyle = {
@@ -40,11 +40,16 @@ const App: React.FC = () => {
     const [mapVisible, setMapVisible] = useState<boolean>(false);
     const [showAnswer, setShowAnswer] = useState<boolean>(false);
     const [showCongrats, setShowCongrats] = useState<boolean>(false);
+    const [showFailed, setShowFailed] = useState<boolean>(false);
     const [distance, setDistance] = useState<number>(0);
+    const [showLine, setShowLine] = useState<boolean>(false);
+    const [linePath, setLinePath] = useState<google.maps.LatLngLiteral[]>([]);
     const panoramaRef = useRef<google.maps.StreetViewPanorama | null>(null);
     const countdownRef = useRef<number | null>(null);
     const mapRef = useRef<google.maps.Map | null>(null);
     const answerTimeoutRef = useRef<number | null>(null);
+    const lineRef = useRef<google.maps.Polyline | null>(null);
+    const [mapKey, setMapKey] = useState<number>(0);
 
     // Debug API key
     useEffect(() => {
@@ -63,7 +68,17 @@ const App: React.FC = () => {
     }, []);
 
     const startNewRound = useCallback(() => {
+        // Clear the line first and ensure it's completely removed
+        setShowLine(false);
+        setLinePath([]);
+
+        // Force a complete map re-render
+        setMapKey(prev => prev + 1);
+
         const newPosition = generateRandomLocation();
+        console.log('Starting new round with position:', newPosition);
+
+        // Then update other states
         setPosition(newPosition);
         setGuessPosition(null);
         setGameStarted(true);
@@ -74,6 +89,7 @@ const App: React.FC = () => {
         setRoundComplete(false);
         setShowAnswer(false);
         setShowCongrats(false);
+        setShowFailed(false);
         setDistance(0);
 
         // Clear any existing timeouts
@@ -99,17 +115,22 @@ const App: React.FC = () => {
     }, [generateRandomLocation]);
 
     const handleMapClick = (e: google.maps.MapMouseEvent) => {
-        if (!gameStarted || showStreetView || roundComplete) return;
+        if (!gameStarted || showStreetView || roundComplete) {
+            console.log('Map click ignored:', { gameStarted, showStreetView, roundComplete });
+            return;
+        }
 
         if (e.latLng) {
             const guess = {
                 lat: e.latLng.lat(),
                 lng: e.latLng.lng(),
             };
+            console.log('Making guess:', guess);
             setGuessPosition(guess);
 
             // Calculate score based on distance
             if (position) {
+                console.log('Current position:', position);
                 const calculatedDistance = google.maps.geometry.spherical.computeDistanceBetween(
                     new google.maps.LatLng(position.lat, position.lng),
                     new google.maps.LatLng(guess.lat, guess.lng)
@@ -117,14 +138,73 @@ const App: React.FC = () => {
                 setDistance(calculatedDistance);
                 const points = Math.max(0, 5000 - Math.floor(calculatedDistance));
                 setScore(prev => prev + points);
+
+                // Set the line path
+                setLinePath([guess, position]);
+                setShowLine(true);
+
+                // Ensure these states are set in the correct order
                 setRoundComplete(true);
                 setShowAnswer(true);
-                setShowCongrats(calculatedDistance <= 3000); // Show congrats if within 3km
+                setShowCongrats(calculatedDistance <= 3000);
+                setShowFailed(calculatedDistance > 3000);
 
-                // Start next round after 3 seconds
+                // Log the states for debugging
+                console.log('Round complete:', true);
+                console.log('Show answer:', true);
+                console.log('Position:', position);
+                console.log('Guess position:', guess);
+                console.log('Distance:', calculatedDistance);
+
+                // Animate to show both locations
+                if (mapRef.current) {
+                    // Calculate the center point between the two locations
+                    const center = {
+                        lat: (position.lat + guess.lat) / 2,
+                        lng: (position.lng + guess.lng) / 2
+                    };
+
+                    // Create bounds to include both markers
+                    const bounds = new google.maps.LatLngBounds();
+                    bounds.extend(position);
+                    bounds.extend(guess);
+
+                    // Add padding to ensure both points are visible
+                    const padding = {
+                        top: 100,
+                        right: 100,
+                        bottom: 100,
+                        left: 100
+                    };
+
+                    // First fit bounds to show both points
+                    mapRef.current.fitBounds(bounds, padding);
+
+                    // Then pan to the center point after a short delay
+                    setTimeout(() => {
+                        if (mapRef.current) {
+                            mapRef.current.panTo(center);
+
+                            // Ensure we don't zoom in too close
+                            const listener = google.maps.event.addListener(mapRef.current, 'bounds_changed', () => {
+                                if (mapRef.current) {
+                                    const currentZoom = mapRef.current.getZoom();
+                                    if (currentZoom && currentZoom > 15) {
+                                        mapRef.current.setZoom(15);
+                                    }
+                                }
+                                google.maps.event.removeListener(listener);
+                            });
+                        }
+                    }, 100);
+                }
+
+                // Start next round after 5 seconds
                 answerTimeoutRef.current = setTimeout(() => {
                     startNewRound();
-                }, 3000);
+                }, 5000);
+            } else {
+                console.log('No position available for comparison');
             }
         }
     };
@@ -197,6 +277,23 @@ const App: React.FC = () => {
         };
     }, []);
 
+    // Add cleanup effect
+    useEffect(() => {
+        return () => {
+            // Clear line when component unmounts
+            setShowLine(false);
+            setLinePath([]);
+        };
+    }, []);
+
+    // Add effect to clear line when round completes
+    useEffect(() => {
+        if (!roundComplete) {
+            setShowLine(false);
+            setLinePath([]);
+        }
+    }, [roundComplete]);
+
     if (!import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
         return (
             <div className="flex items-center justify-center h-screen bg-gray-100">
@@ -226,7 +323,7 @@ const App: React.FC = () => {
                         {!showStreetView && !roundComplete && <p>Click on the map to make your guess!</p>}
                         {showAnswer && (
                             <div>
-                                <p>Next round starting in {Math.ceil((answerTimeoutRef.current ? 3000 - (Date.now() - (answerTimeoutRef.current - 3000)) : 0) / 1000)} seconds...</p>
+                                <p>Next round starting in {Math.ceil((answerTimeoutRef.current ? 5000 - (Date.now() - (answerTimeoutRef.current - 5000)) : 0) / 1000)} seconds...</p>
                                 <p>Distance: {(distance / 1000).toFixed(2)} km</p>
                             </div>
                         )}
@@ -250,6 +347,14 @@ const App: React.FC = () => {
                 <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-green-500 text-white p-6 rounded-lg shadow-xl z-50 text-center">
                     <h2 className="text-3xl font-bold mb-2">🎉 Congratulations! 🎉</h2>
                     <p className="text-xl">You were within 3km of the location!</p>
+                    <p className="text-lg mt-2">Distance: {(distance / 1000).toFixed(2)} km</p>
+                </div>
+            )}
+
+            {showFailed && (
+                <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-red-500 text-white p-6 rounded-lg shadow-xl z-50 text-center">
+                    <h2 className="text-3xl font-bold mb-2">❌ Try Again! ❌</h2>
+                    <p className="text-xl">You were more than 3km away from the location</p>
                     <p className="text-lg mt-2">Distance: {(distance / 1000).toFixed(2)} km</p>
                 </div>
             )}
@@ -296,11 +401,12 @@ const App: React.FC = () => {
                         }}
                     >
                         <GoogleMap
+                            key={mapKey}
                             mapContainerStyle={{
                                 ...containerStyle,
                                 height: 'calc(100vh - 80px)'
                             }}
-                            center={defaultCenter}
+                            center={guessPosition || position || defaultCenter}
                             zoom={11}
                             onClick={handleMapClick}
                             onLoad={onMapLoad}
@@ -314,7 +420,9 @@ const App: React.FC = () => {
                                 restriction: {
                                     latLngBounds: calgaryBounds,
                                     strictBounds: false
-                                }
+                                },
+                                minZoom: 9,
+                                maxZoom: 18
                             }}
                         >
                             {guessPosition && (
@@ -325,11 +433,31 @@ const App: React.FC = () => {
                                     }}
                                 />
                             )}
-                            {roundComplete && position && (
+                            {showAnswer && position && (
                                 <Marker
                                     position={position}
                                     icon={{
                                         url: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'
+                                    }}
+                                />
+                            )}
+                            {showLine && linePath.length === 2 && !showStreetView && roundComplete && (
+                                <Polyline
+                                    key={`line-${linePath[0].lat}-${linePath[0].lng}-${linePath[1].lat}-${linePath[1].lng}`}
+                                    path={linePath}
+                                    options={{
+                                        strokeColor: '#FF0000',
+                                        strokeOpacity: 0.8,
+                                        strokeWeight: 3,
+                                        geodesic: true,
+                                        icons: [{
+                                            icon: {
+                                                path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                                                scale: 3,
+                                                strokeColor: '#FF0000',
+                                            },
+                                            offset: '50%',
+                                        }],
                                     }}
                                 />
                             )}
