@@ -27,6 +27,9 @@ const defaultCenter = {
     lng: (CALGARY_BOUNDS.east + CALGARY_BOUNDS.west) / 2
 };
 
+// Define libraries array outside component
+const GOOGLE_MAPS_LIBRARIES: ("geometry" | "places" | "drawing" | "visualization")[] = ["geometry"];
+
 const App: React.FC = () => {
     const [position, setPosition] = useState<google.maps.LatLngLiteral | null>(null);
     const [guessPosition, setGuessPosition] = useState<google.maps.LatLngLiteral | null>(null);
@@ -361,7 +364,7 @@ const App: React.FC = () => {
 
             <LoadScript
                 googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
-                libraries={['geometry']}
+                libraries={GOOGLE_MAPS_LIBRARIES}
                 onLoad={() => {
                     console.log('Google Maps loaded successfully');
                     setIsLoaded(true);
@@ -383,7 +386,8 @@ const App: React.FC = () => {
                             transition: 'opacity 0.5s ease-in-out',
                             pointerEvents: showStreetView ? 'auto' : 'none',
                             zIndex: showStreetView ? 1 : 0,
-                            height: 'calc(100vh - 80px)'
+                            height: 'calc(100vh - 80px)',
+                            display: showStreetView ? 'block' : 'none'
                         }}
                     />
 
