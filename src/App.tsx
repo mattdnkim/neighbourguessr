@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { GoogleMap, LoadScript, Marker, Polyline } from '@react-google-maps/api';
+import AdSense from './components/AdSense';
 
 // Calgary city boundaries (approximate)
 const CALGARY_BOUNDS = {
@@ -339,6 +340,21 @@ const App: React.FC = () => {
                     </button>
                 </div>
             </div>
+
+            {/* Add AdSense component only after failed guess */}
+            {showFailed && (
+                <div className="w-full flex justify-center my-2 bg-gray-100 py-2">
+                    <AdSense
+                        adSlot="YOUR_AD_SLOT_ID" // Replace with your ad slot ID
+                        style={{
+                            display: 'block',
+                            width: '320px',
+                            height: '100px',
+                            margin: '0 auto'
+                        }}
+                    />
+                </div>
+            )}
 
             {error && (
                 <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">

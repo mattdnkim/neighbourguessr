@@ -38,3 +38,5 @@ dist-ssr
 # Cache
 .cache
 .temp 
+# Local Netlify folder
+.netlify
