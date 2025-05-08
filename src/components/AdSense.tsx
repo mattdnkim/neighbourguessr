@@ -29,7 +29,7 @@ const AdSense: React.FC<AdSenseProps> = ({ adSlot, adFormat = 'auto', style = {}
                 ...style,
             }}
             data-ad-client="ca-pub-1261809379963469"
-            data-ad-slot={adSlot}
+            data-ad-slot="6487589511"
             data-ad-format={adFormat}
             data-full-width-responsive="true"
         />

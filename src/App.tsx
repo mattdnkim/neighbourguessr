@@ -345,7 +345,7 @@ const App: React.FC = () => {
             {showFailed && (
                 <div className="w-full flex justify-center my-2 bg-gray-100 py-2">
                     <AdSense
-                        adSlot="YOUR_AD_SLOT_ID" // Replace with your ad slot ID
+                        adSlot="6487589511"
                         style={{
                             display: 'block',
                             width: '320px',
