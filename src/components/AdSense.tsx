@@ -1,36 +1,30 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 interface AdSenseProps {
     adSlot: string;
-    adFormat?: string;
     style?: React.CSSProperties;
 }
 
-declare global {
-    interface Window {
-        adsbygoogle: any[];
-    }
-}
+const AdSense: React.FC<AdSenseProps> = ({ adSlot, style }) => {
+    const adRef = useRef<HTMLDivElement>(null);
 
-const AdSense: React.FC<AdSenseProps> = ({ adSlot, adFormat = 'auto', style = {} }) => {
     useEffect(() => {
         try {
+            // @ts-ignore
             (window.adsbygoogle = window.adsbygoogle || []).push({});
         } catch (error) {
-            console.error('AdSense error:', error);
+            // Silently handle error
         }
     }, []);
 
     return (
         <ins
+            ref={adRef}
             className="adsbygoogle"
-            style={{
-                display: 'block',
-                ...style,
-            }}
+            style={style}
             data-ad-client="ca-pub-1261809379963469"
-            data-ad-slot="6487589511"
-            data-ad-format={adFormat}
+            data-ad-slot={adSlot}
+            data-ad-format="auto"
             data-full-width-responsive="true"
         />
     );

@@ -64,10 +64,8 @@ const App: React.FC = () => {
     // Debug API key
     useEffect(() => {
         const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'YOUR_DEVELOPMENT_API_KEY';
-        console.log('API Key:', apiKey ? 'Present' : 'Missing');
-        console.log('Environment:', import.meta.env.MODE);
         if (!apiKey) {
-            setError('API key is missing. Please check your .env file.');
+            setError('Configuration error. Please contact support.');
         }
     }, []);
 
@@ -129,7 +127,6 @@ const App: React.FC = () => {
 
     const handleMapClick = (e: google.maps.MapMouseEvent) => {
         if (!gameStarted || showStreetView || roundComplete) {
-            console.log('Map click ignored:', { gameStarted, showStreetView, roundComplete });
             return;
         }
 
@@ -138,12 +135,10 @@ const App: React.FC = () => {
                 lat: e.latLng.lat(),
                 lng: e.latLng.lng(),
             };
-            console.log('Making guess:', guess);
             setGuessPosition(guess);
 
             // Calculate score based on distance
             if (position) {
-                console.log('Current position:', position);
                 const calculatedDistance = google.maps.geometry.spherical.computeDistanceBetween(
                     new google.maps.LatLng(position.lat, position.lng),
                     new google.maps.LatLng(guess.lat, guess.lng)
@@ -161,13 +156,6 @@ const App: React.FC = () => {
                 setShowAnswer(true);
                 setShowCongrats(calculatedDistance <= 3000);
                 setShowFailed(calculatedDistance > 3000);
-
-                // Log the states for debugging
-                console.log('Round complete:', true);
-                console.log('Show answer:', true);
-                console.log('Position:', position);
-                console.log('Guess position:', guess);
-                console.log('Distance:', calculatedDistance);
 
                 // Animate to show both locations
                 if (mapRef.current) {
@@ -216,8 +204,6 @@ const App: React.FC = () => {
                 answerTimeoutRef.current = setTimeout(() => {
                     startNewRound();
                 }, 5000);
-            } else {
-                console.log('No position available for comparison');
             }
         }
     };
@@ -234,15 +220,10 @@ const App: React.FC = () => {
 
     useEffect(() => {
         if (position && isLoaded) {
-            console.log('Attempting to load Street View for position:', position);
             const streetViewService = new google.maps.StreetViewService();
             streetViewService.getPanorama({ location: position, radius: 50 }, (data, status) => {
-                console.log('Street View Status:', status);
-                console.log('Street View Data:', data);
                 if (status === 'OK' && data?.location?.pano) {
-                    console.log('Found panorama ID:', data.location.pano);
                     if (!panoramaRef.current) {
-                        console.log('Creating new Street View panorama');
                         const panorama = new google.maps.StreetViewPanorama(
                             document.getElementById('street-view') as HTMLElement,
                             {
@@ -263,12 +244,10 @@ const App: React.FC = () => {
                         );
                         panoramaRef.current = panorama;
                     } else {
-                        console.log('Updating existing panorama with new ID:', data.location.pano);
                         panoramaRef.current.setPano(data.location.pano);
                     }
                 } else {
-                    console.error('Street View error:', status);
-                    setError(`No Street View available at this location (${status}). Please try again.`);
+                    setError('Unable to load street view. Please try again.');
                     startNewRound();
                 }
             });
@@ -347,7 +326,6 @@ const App: React.FC = () => {
                 }
             }
         } catch (error) {
-            console.error('Geocoding error:', error);
             const quadrant = getQuadrant(position.lat, position.lng);
             setHintText(`Location is in a suburb of ${quadrant} Calgary`);
         }
@@ -358,14 +336,7 @@ const App: React.FC = () => {
             <div className="flex items-center justify-center h-screen bg-gray-100">
                 <div className="text-center p-8 bg-white rounded-lg shadow-lg">
                     <h1 className="text-2xl font-bold text-red-600 mb-4">Configuration Error</h1>
-                    <p className="mb-4">Please set up your Google Maps API key in the .env file:</p>
-                    <code className="block bg-gray-100 p-2 rounded mb-4">VITE_GOOGLE_MAPS_API_KEY=your_api_key_here</code>
-                    <p>Make sure to enable the following APIs in Google Cloud Console:</p>
-                    <ul className="list-disc list-inside text-left mb-4">
-                        <li>Maps JavaScript API</li>
-                        <li>Street View Static API</li>
-                        <li>Places API</li>
-                    </ul>
+                    <p className="mb-4">Please contact support for assistance.</p>
                 </div>
             </div>
         );
