@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { GoogleMap, LoadScript, Marker, Polyline } from '@react-google-maps/api';
-import AdSense from './components/AdSense';
+// import AdSense from './components/AdSense';
 
 // Calgary city boundaries (approximate)
 const CALGARY_BOUNDS = {
@@ -54,6 +54,12 @@ const App: React.FC = () => {
     const answerTimeoutRef = useRef<number | null>(null);
     const lineRef = useRef<google.maps.Polyline | null>(null);
     const [mapKey, setMapKey] = useState<number>(0);
+    const [showHint, setShowHint] = useState<boolean>(false);
+    const [hintText, setHintText] = useState<string>('');
+    const [hintUsed, setHintUsed] = useState<boolean>(false);
+
+    // Add geocoder service
+    const geocoder = useRef<google.maps.Geocoder | null>(null);
 
     // Debug API key
     useEffect(() => {
@@ -95,6 +101,9 @@ const App: React.FC = () => {
         setShowCongrats(false);
         setShowFailed(false);
         setDistance(0);
+        setShowHint(false);
+        setHintText('');
+        setHintUsed(false);
 
         // Clear any existing timeouts
         if (countdownRef.current) {
@@ -298,6 +307,52 @@ const App: React.FC = () => {
         }
     }, [roundComplete]);
 
+    // Function to get quadrant from coordinates
+    const getQuadrant = (lat: number, lng: number): string => {
+        const centerLat = (CALGARY_BOUNDS.north + CALGARY_BOUNDS.south) / 2;
+        const centerLng = (CALGARY_BOUNDS.east + CALGARY_BOUNDS.west) / 2;
+
+        if (lat > centerLat && lng > centerLng) return "Northeast";
+        if (lat > centerLat && lng < centerLng) return "Northwest";
+        if (lat < centerLat && lng > centerLng) return "Southeast";
+        return "Southwest";
+    };
+
+    // Function to get address hint
+    const getAddressHint = useCallback(async (position: google.maps.LatLngLiteral) => {
+        if (!geocoder.current) {
+            geocoder.current = new google.maps.Geocoder();
+        }
+
+        try {
+            const result = await geocoder.current.geocode({ location: position });
+            if (result.results[0]) {
+                const address = result.results[0].formatted_address;
+                const quadrant = getQuadrant(position.lat, position.lng);
+
+                // Check if the address contains any quadrant indicators
+                const hasQuadrantInAddress = address.toLowerCase().includes('northeast') ||
+                    address.toLowerCase().includes('northwest') ||
+                    address.toLowerCase().includes('southeast') ||
+                    address.toLowerCase().includes('southwest') ||
+                    address.toLowerCase().includes(' ne ') ||
+                    address.toLowerCase().includes(' nw ') ||
+                    address.toLowerCase().includes(' se ') ||
+                    address.toLowerCase().includes(' sw ');
+
+                if (hasQuadrantInAddress) {
+                    setHintText(`Location is in ${quadrant} Calgary, near ${address}`);
+                } else {
+                    setHintText(`Location is in a suburb of ${quadrant} Calgary, near ${address}`);
+                }
+            }
+        } catch (error) {
+            console.error('Geocoding error:', error);
+            const quadrant = getQuadrant(position.lat, position.lng);
+            setHintText(`Location is in a suburb of ${quadrant} Calgary`);
+        }
+    }, []);
+
     if (!import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
         return (
             <div className="flex items-center justify-center h-screen bg-gray-100">
@@ -318,13 +373,31 @@ const App: React.FC = () => {
 
     return (
         <div className="flex flex-col h-screen">
-            <div className="bg-blue-600 text-white p-4">
-                <h1 className="text-2xl font-bold">NeibourGuessr</h1>
-                <div className="flex justify-between items-center">
+            <div className="bg-blue-600 text-white p-2 fixed top-0 left-0 right-0 z-50">
+                <h1 className="text-xl font-bold">NeibourGuessr</h1>
+                <div className="flex justify-between items-center text-sm">
                     <div>
                         <p>Score: {score}</p>
                         {showStreetView && <p>Time remaining: {countdown} seconds</p>}
-                        {!showStreetView && !roundComplete && <p>Click on the map to make your guess!</p>}
+                        {!showStreetView && !roundComplete && (
+                            <div className="flex items-center gap-2">
+                                <p>Click on the map to make your guess!</p>
+                                {!hintUsed && (
+                                    <button
+                                        onClick={() => {
+                                            if (position) {
+                                                getAddressHint(position);
+                                                setShowHint(true);
+                                                setHintUsed(true);
+                                            }
+                                        }}
+                                        className="bg-yellow-500 text-white px-2 py-1 rounded text-xs hover:bg-yellow-600"
+                                    >
+                                        Get Hint
+                                    </button>
+                                )}
+                            </div>
+                        )}
                         {showAnswer && (
                             <div>
                                 <p>Next round starting in {Math.ceil((answerTimeoutRef.current ? 5000 - (Date.now() - (answerTimeoutRef.current - 5000)) : 0) / 1000)} seconds...</p>
@@ -334,157 +407,167 @@ const App: React.FC = () => {
                     </div>
                     <button
                         onClick={startNewRound}
-                        className="bg-white text-blue-600 px-4 py-2 rounded hover:bg-blue-100"
+                        className="bg-white text-blue-600 px-3 py-1 rounded hover:bg-blue-100 text-sm"
                     >
                         Skip to Next Round
                     </button>
                 </div>
             </div>
 
-            {/* Add AdSense component only after failed guess */}
-            {showFailed && (
-                <div className="w-full flex justify-center my-2 bg-gray-100 py-2">
-                    <AdSense
-                        adSlot="6487589511"
-                        style={{
-                            display: 'block',
-                            width: '320px',
-                            height: '100px',
-                            margin: '0 auto'
-                        }}
-                    />
-                </div>
-            )}
+            {/* Add padding to account for fixed header */}
+            <div className="pt-20">
+                {/* Show hint if available */}
+                {showHint && hintText && (
+                    <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-2 rounded relative mx-4 my-2" role="alert">
+                        <span className="block sm:inline">{hintText}</span>
+                    </div>
+                )}
 
-            {error && (
-                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-                    <span className="block sm:inline">{error}</span>
-                </div>
-            )}
+                {/* Add AdSense component only after failed guess */}
+                {/* {showFailed && (
+                    <div className="w-full flex justify-center my-2 bg-gray-100 py-2">
+                        <AdSense
+                            adSlot="6487589511"
+                            style={{ 
+                                display: 'block', 
+                                width: '320px', 
+                                height: '100px',
+                                margin: '0 auto'
+                            }}
+                        />
+                    </div>
+                )} */}
 
-            {showCongrats && (
-                <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-green-500 text-white p-6 rounded-lg shadow-xl z-50 text-center">
-                    <h2 className="text-3xl font-bold mb-2">🎉 Congratulations! 🎉</h2>
-                    <p className="text-xl">You were within 3km of the location!</p>
-                    <p className="text-lg mt-2">Distance: {(distance / 1000).toFixed(2)} km</p>
-                </div>
-            )}
+                {error && (
+                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                        <span className="block sm:inline">{error}</span>
+                    </div>
+                )}
 
-            {showFailed && (
-                <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-red-500 text-white p-6 rounded-lg shadow-xl z-50 text-center">
-                    <h2 className="text-3xl font-bold mb-2">❌ Try Again! ❌</h2>
-                    <p className="text-xl">You were more than 3km away from the location</p>
-                    <p className="text-lg mt-2">Distance: {(distance / 1000).toFixed(2)} km</p>
-                </div>
-            )}
+                {showCongrats && (
+                    <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-green-500 text-white p-6 rounded-lg shadow-xl z-50 text-center">
+                        <h2 className="text-3xl font-bold mb-2">🎉 Congratulations! 🎉</h2>
+                        <p className="text-xl">You were within 3km of the location!</p>
+                        <p className="text-lg mt-2">Distance: {(distance / 1000).toFixed(2)} km</p>
+                    </div>
+                )}
 
-            <LoadScript
-                googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
-                libraries={GOOGLE_MAPS_LIBRARIES}
-                onLoad={() => {
-                    console.log('Google Maps loaded successfully');
-                    setIsLoaded(true);
-                }}
-                onError={(error) => {
-                    console.error('Google Maps load error:', error);
-                    setError('Failed to load Google Maps. Please check your API key and console for details.');
-                }}
-            >
-                <div className="flex-1 relative" style={{ marginTop: 'auto' }}>
-                    <div
-                        id="street-view"
-                        style={{
-                            ...containerStyle,
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            opacity: showStreetView ? 1 : 0,
-                            transition: 'opacity 0.5s ease-in-out',
-                            pointerEvents: showStreetView ? 'auto' : 'none',
-                            zIndex: showStreetView ? 1 : 0,
-                            height: 'calc(100vh - 80px)',
-                            display: showStreetView ? 'block' : 'none'
-                        }}
-                    />
+                {showFailed && (
+                    <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-red-500 text-white p-6 rounded-lg shadow-xl z-50 text-center">
+                        <h2 className="text-3xl font-bold mb-2">❌ Try Again! ❌</h2>
+                        <p className="text-xl">You were more than 3km away from the location</p>
+                        <p className="text-lg mt-2">Distance: {(distance / 1000).toFixed(2)} km</p>
+                    </div>
+                )}
 
-                    <div
-                        style={{
-                            ...containerStyle,
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            opacity: mapVisible ? 1 : 0,
-                            transition: 'opacity 0.5s ease-in-out',
-                            pointerEvents: mapVisible ? 'auto' : 'none',
-                            zIndex: mapVisible ? 1 : 0,
-                            height: 'calc(100vh - 80px)'
-                        }}
-                    >
-                        <GoogleMap
-                            key={mapKey}
-                            mapContainerStyle={{
+                <LoadScript
+                    googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
+                    libraries={GOOGLE_MAPS_LIBRARIES}
+                    onLoad={() => {
+                        console.log('Google Maps loaded successfully');
+                        setIsLoaded(true);
+                    }}
+                    onError={(error) => {
+                        console.error('Google Maps load error:', error);
+                        setError('Failed to load Google Maps. Please check your API key and console for details.');
+                    }}
+                >
+                    <div className="flex-1 relative" style={{ marginTop: 'auto' }}>
+                        <div
+                            id="street-view"
+                            style={{
                                 ...containerStyle,
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                opacity: showStreetView ? 1 : 0,
+                                transition: 'opacity 0.5s ease-in-out',
+                                pointerEvents: showStreetView ? 'auto' : 'none',
+                                zIndex: showStreetView ? 1 : 0,
+                                height: 'calc(100vh - 80px)',
+                                display: showStreetView ? 'block' : 'none'
+                            }}
+                        />
+
+                        <div
+                            style={{
+                                ...containerStyle,
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                opacity: mapVisible ? 1 : 0,
+                                transition: 'opacity 0.5s ease-in-out',
+                                pointerEvents: mapVisible ? 'auto' : 'none',
+                                zIndex: mapVisible ? 1 : 0,
                                 height: 'calc(100vh - 80px)'
                             }}
-                            center={guessPosition || position || defaultCenter}
-                            zoom={11}
-                            onClick={handleMapClick}
-                            onLoad={onMapLoad}
-                            options={{
-                                streetViewControl: false,
-                                mapTypeControl: false,
-                                fullscreenControl: false,
-                                zoomControl: true,
-                                clickableIcons: false,
-                                gestureHandling: 'greedy',
-                                restriction: {
-                                    latLngBounds: calgaryBounds,
-                                    strictBounds: false
-                                },
-                                minZoom: 9,
-                                maxZoom: 18
-                            }}
                         >
-                            {guessPosition && (
-                                <Marker
-                                    position={guessPosition}
-                                    icon={{
-                                        url: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
-                                    }}
-                                />
-                            )}
-                            {showAnswer && position && (
-                                <Marker
-                                    position={position}
-                                    icon={{
-                                        url: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'
-                                    }}
-                                />
-                            )}
-                            {showLine && linePath.length === 2 && !showStreetView && roundComplete && (
-                                <Polyline
-                                    key={`line-${linePath[0].lat}-${linePath[0].lng}-${linePath[1].lat}-${linePath[1].lng}`}
-                                    path={linePath}
-                                    options={{
-                                        strokeColor: '#FF0000',
-                                        strokeOpacity: 0.8,
-                                        strokeWeight: 3,
-                                        geodesic: true,
-                                        icons: [{
-                                            icon: {
-                                                path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-                                                scale: 3,
-                                                strokeColor: '#FF0000',
-                                            },
-                                            offset: '50%',
-                                        }],
-                                    }}
-                                />
-                            )}
-                        </GoogleMap>
+                            <GoogleMap
+                                key={mapKey}
+                                mapContainerStyle={{
+                                    ...containerStyle,
+                                    height: 'calc(100vh - 80px)'
+                                }}
+                                center={guessPosition || position || defaultCenter}
+                                zoom={11}
+                                onClick={handleMapClick}
+                                onLoad={onMapLoad}
+                                options={{
+                                    streetViewControl: false,
+                                    mapTypeControl: false,
+                                    fullscreenControl: false,
+                                    zoomControl: true,
+                                    clickableIcons: false,
+                                    gestureHandling: 'greedy',
+                                    restriction: {
+                                        latLngBounds: calgaryBounds,
+                                        strictBounds: false
+                                    },
+                                    minZoom: 9,
+                                    maxZoom: 18
+                                }}
+                            >
+                                {guessPosition && (
+                                    <Marker
+                                        position={guessPosition}
+                                        icon={{
+                                            url: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+                                        }}
+                                    />
+                                )}
+                                {showAnswer && position && (
+                                    <Marker
+                                        position={position}
+                                        icon={{
+                                            url: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'
+                                        }}
+                                    />
+                                )}
+                                {showLine && linePath.length === 2 && !showStreetView && roundComplete && (
+                                    <Polyline
+                                        key={`line-${linePath[0].lat}-${linePath[0].lng}-${linePath[1].lat}-${linePath[1].lng}`}
+                                        path={linePath}
+                                        options={{
+                                            strokeColor: '#FF0000',
+                                            strokeOpacity: 0.8,
+                                            strokeWeight: 3,
+                                            geodesic: true,
+                                            icons: [{
+                                                icon: {
+                                                    path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                                                    scale: 3,
+                                                    strokeColor: '#FF0000',
+                                                },
+                                                offset: '50%',
+                                            }],
+                                        }}
+                                    />
+                                )}
+                            </GoogleMap>
+                        </div>
                     </div>
-                </div>
-            </LoadScript>
+                </LoadScript>
+            </div>
         </div>
     );
 };
