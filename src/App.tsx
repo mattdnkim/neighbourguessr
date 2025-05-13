@@ -57,6 +57,16 @@ const App: React.FC = () => {
     const [showHint, setShowHint] = useState<boolean>(false);
     const [hintText, setHintText] = useState<string>('');
     const [hintUsed, setHintUsed] = useState<boolean>(false);
+    const [isRateLimited, setIsRateLimited] = useState<boolean>(false);
+    const [rateLimitMessage, setRateLimitMessage] = useState<string>('');
+    const lastApiCallRef = useRef<number>(0);
+    const apiCallCountRef = useRef<number>(0);
+    const rateLimitResetTimeoutRef = useRef<number | null>(null);
+
+    // Constants for rate limiting
+    const RATE_LIMIT_WINDOW = 60000; // 1 minute in milliseconds
+    const MAX_API_CALLS = 10; // Maximum API calls per minute
+    const RATE_LIMIT_DURATION = 300000; // 5 minutes in milliseconds
 
     // Add geocoder service
     const geocoder = useRef<google.maps.Geocoder | null>(null);
@@ -75,7 +85,48 @@ const App: React.FC = () => {
         return { lat, lng };
     }, []);
 
+    const checkRateLimit = useCallback(() => {
+        const now = Date.now();
+        const timeSinceLastCall = now - lastApiCallRef.current;
+
+        // Reset count if window has passed
+        if (timeSinceLastCall > RATE_LIMIT_WINDOW) {
+            apiCallCountRef.current = 0;
+        }
+
+        // Check if we're over the limit
+        if (apiCallCountRef.current >= MAX_API_CALLS) {
+            setIsRateLimited(true);
+            setRateLimitMessage('Rate limit reached. Please wait a few minutes before trying again.');
+
+            // Set timeout to reset rate limit
+            if (rateLimitResetTimeoutRef.current) {
+                clearTimeout(rateLimitResetTimeoutRef.current);
+            }
+            rateLimitResetTimeoutRef.current = window.setTimeout(() => {
+                setIsRateLimited(false);
+                setRateLimitMessage('');
+                apiCallCountRef.current = 0;
+            }, RATE_LIMIT_DURATION);
+
+            return true;
+        }
+
+        // Update counters
+        apiCallCountRef.current++;
+        lastApiCallRef.current = now;
+        return false;
+    }, []);
+
     const startNewRound = useCallback(() => {
+        if (isRateLimited) {
+            return;
+        }
+
+        if (checkRateLimit()) {
+            return;
+        }
+
         // Clear the line first and ensure it's completely removed
         setShowLine(false);
         setLinePath([]);
@@ -123,10 +174,14 @@ const App: React.FC = () => {
                 return prev - 1;
             });
         }, 1000);
-    }, [generateRandomLocation]);
+    }, [isRateLimited, checkRateLimit, generateRandomLocation]);
 
     const handleMapClick = (e: google.maps.MapMouseEvent) => {
-        if (!gameStarted || showStreetView || roundComplete) {
+        if (!gameStarted || showStreetView || roundComplete || isRateLimited) {
+            return;
+        }
+
+        if (checkRateLimit()) {
             return;
         }
 
@@ -299,6 +354,14 @@ const App: React.FC = () => {
 
     // Function to get address hint
     const getAddressHint = useCallback(async (position: google.maps.LatLngLiteral) => {
+        if (isRateLimited) {
+            return;
+        }
+
+        if (checkRateLimit()) {
+            return;
+        }
+
         if (!geocoder.current) {
             geocoder.current = new google.maps.Geocoder();
         }
@@ -309,7 +372,6 @@ const App: React.FC = () => {
                 const address = result.results[0].formatted_address;
                 const quadrant = getQuadrant(position.lat, position.lng);
 
-                // Check if the address contains any quadrant indicators
                 const hasQuadrantInAddress = address.toLowerCase().includes('northeast') ||
                     address.toLowerCase().includes('northwest') ||
                     address.toLowerCase().includes('southeast') ||
@@ -329,7 +391,7 @@ const App: React.FC = () => {
             const quadrant = getQuadrant(position.lat, position.lng);
             setHintText(`Location is in a suburb of ${quadrant} Calgary`);
         }
-    }, []);
+    }, [isRateLimited, checkRateLimit]);
 
     if (!import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
         return (
@@ -383,6 +445,11 @@ const App: React.FC = () => {
                         Skip to Next Round
                     </button>
                 </div>
+                {isRateLimited && (
+                    <div className="bg-red-500 text-white px-4 py-2 rounded mt-2">
+                        {rateLimitMessage}
+                    </div>
+                )}
             </div>
 
             {/* Add padding to account for fixed header */}
