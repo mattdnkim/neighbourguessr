@@ -1,4 +1,4 @@
-# NeibourGuessr
+# NeighbourGuessr
 
 A city-specific GeoGuessr clone that challenges players to guess locations within Calgary using Google Street View.
 

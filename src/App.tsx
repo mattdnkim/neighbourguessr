@@ -372,24 +372,13 @@ const App: React.FC = () => {
                 const address = result.results[0].formatted_address;
                 const quadrant = getQuadrant(position.lat, position.lng);
 
-                const hasQuadrantInAddress = address.toLowerCase().includes('northeast') ||
-                    address.toLowerCase().includes('northwest') ||
-                    address.toLowerCase().includes('southeast') ||
-                    address.toLowerCase().includes('southwest') ||
-                    address.toLowerCase().includes(' ne ') ||
-                    address.toLowerCase().includes(' nw ') ||
-                    address.toLowerCase().includes(' se ') ||
-                    address.toLowerCase().includes(' sw ');
-
-                if (hasQuadrantInAddress) {
-                    setHintText(`Location is in ${quadrant} Calgary, near ${address}`);
-                } else {
-                    setHintText(`Location is in a suburb of ${quadrant} Calgary, near ${address}`);
-                }
+                // Extract just the street address (first line of the address)
+                const streetAddress = address.split(',')[0];
+                setHintText(`Near ${streetAddress} ${quadrant}`);
             }
         } catch (error) {
             const quadrant = getQuadrant(position.lat, position.lng);
-            setHintText(`Location is in a suburb of ${quadrant} Calgary`);
+            setHintText(`Location is in ${quadrant} Calgary`);
         }
     }, [isRateLimited, checkRateLimit]);
 
